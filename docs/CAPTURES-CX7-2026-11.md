@@ -21,6 +21,9 @@ what and when:
 - **Local WebSocket, port 9002.** A poller that sent `status/get_device_base_status` every 5 s and
   `info/get_clean_time_line` and `clean/current_clean_task/get` every 15 s, one request per
   connection, reads only. Marked `local` below. A local answer is `{1: 1, 2: <payload>}`.
+- **Commands sent by us, in §13 only.** On the evening of 2026-11-17 dock commands were sent over
+  port 9002 one at a time, the status read every 2 s in between. Each is marked `sent by us`;
+  everything else in this file was sent by the app.
 - **The phone's web traffic** through an intercepting proxy, for the app's calls to Narwal's web
   services. Those are in [`CLOUD-API.md`](CLOUD-API.md), not here.
 
@@ -985,3 +988,93 @@ local 18:09:45  field 3 = 08022006         {1: 2, 4: 6}                 field 11
 local 18:09:50  field 3 = 0813900104       {1: 19, 18: 4}               field 11 = 2   field 1 empty
 local 18:09:55  field 3 = 080e6006         {1: 14, 12: 6}               field 11 = 2   field 1 empty
 ```
+
+## 13. Dock tasks sent over port 9002, and `robot_base_status` field 46 (2026-11-17 20:20 to 20:29)
+
+Unlike every section above, **the commands marked `sent by us` were not sent by the app**: they went
+one at a time over port 9002, with `status/get_device_base_status` read every 2 s in between
+(marked `local`). The app's own two presses in these minutes, the ✕ on "Dust cabinet disinfection"
+and "Mop drying", came over the cloud while a listener ran (unmarked). The owner watched the app's
+Dock panel throughout. Field 46 is shown as the bytes of its value, then decoded; it holds no ids.
+At the start the dock was drying the mop (started from the app earlier).
+
+```
+local 20:20:26  field 3 = 080e6004   {1: 14, 12: 4}
+                field 32 entry 080e6004   {1: 14, 12: 4}
+                field 46  0a0b0887011202080912020815
+                        = {1: {1: 135, 2: [{1: 9}, {1: 21}]}}
+-- sent by us
+local 20:20:26  supply/dry_dust_bag  (0 bytes)  (empty body)   answer 0801 = {1: 1}
+local 20:20:28  field 3 = 080e6004   {1: 14, 12: 4}   (unchanged)
+                field 32 entry 080e6004   {1: 14, 12: 4}
+                field 32 entry 080e6006   {1: 14, 12: 6}
+                field 46  0a0b08870112020809120208150a07088a0112020818
+                        = {1: [{1: 135, 2: [{1: 9}, {1: 21}]}, {1: 138, 2: {1: 24}}]}
+   (the Dock panel at 20:21: "Drying mop" and "Dust cabinet disinfection" as two lines, each with
+    a progress bar, the second with a ✕)
+-- sent by us
+local 20:21:13  task/force_end  (4 bytes)  0a020102 = {1: '0102'}   answer 12020202 = {2: '0202'}
+   (nothing changed in the next 16 s)
+-- the app: ✕ on "Dust cabinet disinfection"
+20:23:40  task/force_end  (3 bytes)  0a0105 = {1: '05'}
+20:23:40  task/force_end/response  (3 bytes)  120101 = {2: '01'}
+20:23:41  field 3 = 080e6004   field 32 = 080e6004 only
+          field 46  0a0b0887011202080912020815
+                  = {1: {1: 135, 2: [{1: 9}, {1: 21}]}}
+-- sent by us
+local 20:24:10  supply/dry_station_bag  (0 bytes)  (empty body)   answer 0801
+20:24:11  field 3 = 08131001900104   {1: 19, 2: 1, 18: 4}
+          field 46  0a09089001120208191801
+                  = {1: {1: 144, 2: {1: 25}, 3: 1}}
+local 20:24:12  field 3 = 0813900104   {1: 19, 18: 4}
+                field 32 entry 0813900104   {1: 19, 18: 4}
+                field 46  0a0708900112020819
+                        = {1: {1: 144, 2: {1: 25}}}
+   (the Dock panel at 20:24: "Drying dock dust bag", about 5 hours; "Mop drying" offered again:
+    the mop drying had ended)
+-- sent by us
+local 20:24:33  task/force_end  0a020102 = {1: '0102'}   answer 12020102 = {2: '0102'}
+local 20:24:35  field 3 = 08011801   {1: 1, 3: 1}
+                field 46  0a0412020801 = {1: {2: {1: 1}}}
+-- sent by us
+local 20:24:56  supply/dry_station_bag  (empty body)   answer 0801
+local 20:24:58  field 3 = 0813900104   {1: 19, 18: 4}
+                field 46  0a0708950112020819
+                        = {1: {1: 149, 2: {1: 25}}}
+-- sent by us
+local 20:25:14  task/force_end  0a020102 = {1: '0102'}   answer 12020102 = {2: '0102'}
+local 20:25:16  field 3 = 08011801   {1: 1, 3: 1}
+                field 46  0a0412020801 = {1: {2: {1: 1}}}
+-- the app: "Mop drying"
+20:29:31  supply/dry_mop  (empty body)   answer 0801
+20:29:31  field 3 = 080e6004   {1: 14, 12: 4}
+          field 46  0a0b0898011202080912020815
+                  = {1: {1: 152, 2: [{1: 9}, {1: 21}]}}
+```
+
+### 13.1 Field 46 through the recordings of 2026-11-13 to 2026-11-17
+
+Every new entry in field 46, by kind (the first `1` in `46.1[].2`), cloud and local recordings
+together, with what was happening at the time:
+
+| Kind | Entries | Went with |
+|---|---|---|
+| 3 | 19 | a cleaning job (every job start recorded, start-and-cancel tests included) |
+| 4 | 7 | a return to the dock, after a recall or a cancelled start (field 3 `{1: 10, 10: n}`) |
+| 9 | 9 | mop washing or drying (`supply/wash_and_dry_mop`, `supply/dry_mop`, or after a mopping job) |
+| 12 | 2 | a dust emptying (`supply/dust_gathering`, 2026-11-13 16:21 and 2026-11-17 15:26) |
+| 13 | 2 | the robot driven by hand from the video view (2026-11-17 15:39 and 15:41) |
+| 24 | 7 | the dust-cabinet disinfection: by itself after each of the six vacuum-only jobs that ran to their end, and once from `supply/dry_dust_bag` (above) |
+| 25 | 9 | the dock-bag drying: after each emptying (forced, or a job's auto-empty), and from `supply/dry_station_bag` |
+| 28 | 1 | a cruise started by a schedule (2026-11-17 15:59) |
+
+Task numbers of the dock-bag drying (kind 25), in order: 7, 3, 2 (2026-11-13), 23 (2026-11-16),
+8, 40, 45, 144, 149 (2026-11-17). No number was reused within a day. The number was absent (a 0,
+which protobuf leaves out) on the first job after the robot's restart from the app at 14:49 on
+2026-11-17 (the job of 15:10), on the first job recorded on 2026-11-13 (09:27), and on the two
+entries that followed the fault of 2026-11-13 16:05:05 (the job of 16:09, the emptying of 16:21).
+After the fault of 16:31:33 the next entry was 2. Low numbers followed each time.
+
+Field 46's `3: 1` and field 32: in every one of the 80,867 status messages recorded (both
+sources), an entry of field 46 carried `3: 1` exactly when field 32 held an entry with `2: 1`
+(paused), such as `{1: 19, 2: 1, 18: 4}` while the app read "Dust bag drying paused" (§5.2).

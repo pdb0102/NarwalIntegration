@@ -283,19 +283,27 @@ MQTT and accepted; none was sent by us.
   only `task/force_end`. To stop a job and bring the robot home the app sent `task/force_end`,
   then `supply/recall`.
 
-`task/force_end` came in four forms:
+`task/force_end` came in five forms:
 
 | Body | App action | Answer | What the robot did |
 |---|---|---|---|
 | `12 02 01 02` = `{2: [1, 2]}` | "Pause", then press and hold to end, on a running cleaning job (2026-11-13, seven times) | `08 01` | Ended the job and **stayed where it stood** |
 | `0a 01 03` = `{1: [3]}` | "End mop drying" in the Dock panel (seen once) | `12 01 01` = `{2: [1]}` | Status `{1: 14, 12: 4}` → `{1: 14, 12: 6}` within 1 s |
 | `0a 02 01 02` = `{1: [1, 2]}` | "End dust bag drying and disinfection" (seen once) | `12 02 01 02` = `{2: [1, 2]}` | Status `{1: 19, 18: 4}` → standby `{1: 1, 3: 1}` within 1 s |
+| `0a 01 05` = `{1: [5]}` | The ✕ on "Dust cabinet disinfection" in the Dock panel (2026-11-17 20:23:40, seen once) | `12 01 01` = `{2: [1]}` | The disinfection ended: its entry left field 46 within 1 s; field 3, showing a mop drying in front, did not change ([captures §13](CAPTURES-CX7-2026-11.md)) |
 | empty | Taking over the drive pad in the video view while the robot was returning to the dock (seen once) | `08 01` | The return ended: `{1: 10, 10: 1}` → `{1: 1, 3: 2}` → `{1: 21, 19: 1}` |
 
-Field 1 therefore reads as a list of dock chores to end: 3 = mop drying; 1 and 2 = dust-bag
-drying and dust-cabinet disinfection, sent together, so which is which is not shown. What the
-two numbers in field 2 of the 2026-11-13 form stand for is not known, and neither is the answer's
-field 2 (a result per item is a guess; two samples).
+Field 1 therefore reads as a list of dock tasks to end: 3 = mop drying, 5 = dust-cabinet
+disinfection, and 1 and 2, always sent together, for the dust-bag drying; which of the two stops
+it is not shown (the integration's `_DOCK_TASK_FORCE_END_PAYLOADS` has `{1: 1}` for the dock bag
+and `{1: 5}` for the dust bin, from a Flow 2). An earlier reading here, "1 and 2 = dust-bag drying
+and dust-cabinet disinfection", was wrong: the disinfection is 5.
+
+The answer's field 2 reads as one result per listed item, 1 = ended, 2 = nothing to end. On
+2026-11-17 at 20:21:13 we sent `{1: [1, 2]}` over port 9002 while only the dust-cabinet
+disinfection was running: the answer was `12 02 02 02` = `{2: [2, 2]}` and nothing stopped. Every
+answer recorded fits (six, [captures §4 and §13](CAPTURES-CX7-2026-11.md)); matched by value. What
+the two numbers in field 2 of the 2026-11-13 form stand for is not known.
 
 ### Dock / supply
 
@@ -307,6 +315,7 @@ field 2 (a result per item is a guess; two samples).
 | `supply/dry_mop` | Dry mop pads. The app's "Mop drying" (CX7, 2026-11-17) |
 | `supply/dust_gathering` | Empty dust bin into the station. The app's "Dock dust emptying" (CX7) |
 | `supply/dry_station_bag` | Dry and disinfect the dock's dust bag. The app's "Dust bag dry & disinfect" (CX7, 2026-11-17; also seen once on 2026-11-13, 16:33:50) |
+| `supply/dry_dust_bag` | Dry and disinfect the robot's dust cabinet. **Not in the app's Dock panel on a CX7**: there the task ("Dust cabinet disinfection") runs by itself after a vacuum-only job and can only be cancelled. Sent by us once over port 9002 (2026-11-17 20:20:26, empty body): answer `08 01`, and the Dock panel showed "Dust cabinet disinfection" ([captures §13](CAPTURES-CX7-2026-11.md)) |
 
 On a CX7 (v01.13.11.02; 2026-11-17) each of the five was one
 press in the app's Dock panel, an **empty body**, and an answer of `08 01`. What
@@ -319,6 +328,7 @@ press in the app's Dock panel, an **empty body**, and an answer of `08 01`. What
 | `supply/dry_station_bag` | `{1: 19, 18: 4}` after 1 s (the app: "Drying dock dust bag", about 5 hours) |
 | `supply/wash_and_dry_mop` | `{1: 14}` for 1 s, `{1: 14, 12: 3}` for 2 min 23 s ("Mop washing with hot water"), then `{1: 14, 12: 4}`; a timeline entry `{2: 4, 3: {1: 6}}`. With the robot off the dock (2026-11-13) it first drove home |
 | `supply/recall` | `{1: 10, 10: 2}` after 1 s; field 11 read 2 (docked) 12 s later, the robot having been driven close to the dock by hand |
+| `supply/dry_dust_bag` (sent by us over port 9002, not by the app) | No change while a mop drying was in front (`{1: 14, 12: 4}`); field 32 gained `{1: 14, 12: 6}` and field 46 a kind-24 entry. After a vacuum-only job the same task shows in field 3 as `{1: 14, 12: 6}` |
 
 The app lets the user start a job while the dock is washing or drying; the start cuts the dock
 chore short (2026-11-13).
@@ -795,6 +805,37 @@ When the middle sample was taken the app's Dock panel read "Dust cabinet disinfe
 bag drying paused" for `{1: 14, 12: 6}` with `{1: 19, 2: 1, 18: 4}` behind it. This reading was made
 from the recordings afterwards; no test was built around it. Field 32 does not list the drying
 that field 11 = 3 points to when field 3 is at standby.
+
+**Field 46 reads as the list of tasks running, each with a number, a kind and a stage.** This is
+our reading of five days of recordings and of a test on the evening of 2026-11-17 in which the dock
+commands were sent one at a time over port 9002 with the app open beside them ([captures §13](CAPTURES-CX7-2026-11.md)).
+A second CX7 on the same firmware shows the same field in issue #171. Idle is `{1: {2: {1: 1}}}`.
+Each entry of `46.1`:
+
+| Path | Reads as | How sure |
+|---|---|---|
+| `46.1[].1` | A task number, not a task code. It rose with every new task (by 3 to 6 per dock task, more across a job), was never reused within a day, and was absent (a 0, which protobuf leaves out) on the first task after a restart and after a fault, low numbers following. The dock-bag drying carried 7, 3, 2, 23, 8, 40, 45, 144 and 149; `supply/dry_station_bag` sent twice with a stop between gave 144, then 149 | A new number for the same command: confirmed by commands sent. A counter that starts over: a guess |
+| `46.1[].2` | The kind of task, then for tasks with stages the current stage: `{1: kind}` or `[{1: kind}, {1: stage}]` | Kinds matched to commands sent and to app actions |
+| `46.1[].3` | `1` = paused: in all 80,867 recorded status messages an entry carried it exactly when field 32 held a paused state (`2: 1`), such as `{1: 19, 2: 1, 18: 4}` while the app read "Dust bag drying paused" | Matched by value |
+
+| Kind | Task (the app's name) | Started by | `task/force_end` item |
+|---|---|---|---|
+| 1 | Idle | | |
+| 3 | A cleaning job. Stages: 18 starting, 12 auto-empty, 5 leaving the dock, none while cleaning, 4 heading home, 20 washing the mop | A job start | |
+| 4 | Returning to the dock | `supply/recall`; after a cancelled start | |
+| 9 | Mop care ("Drying mop"). Stages: 18, 20 washing, 21 drying; a drying alone shows 21 throughout | `supply/dry_mop`, `supply/wash_and_dry_mop` | 3 |
+| 12 | Dust emptying, about 16 s; kind 25 follows by itself | `supply/dust_gathering` | |
+| 13 | Most likely the robot driven by hand from the video view (seen twice) | | |
+| 24 | Dust-cabinet disinfection ("Dust cabinet disinfection"); follows each vacuum-only job by itself; no button for it in the app | `supply/dry_dust_bag` (sent by us; the app never sent it) | 5 |
+| 25 | Dock dust-bag drying and disinfection ("Drying dock dust bag", about 5 hours) | `supply/dry_station_bag`; follows every emptying by itself | 1 and 2, sent together |
+| 28 | A cruise | A schedule | |
+
+So field 3 shows the task in front, field 32 the states of all of them, and field 46 adds kind,
+stage and a number. When the dust-cabinet disinfection started beside a running mop drying
+(2026-11-17 20:20:28), field 3 did not change, field 32 gained `{1: 14, 12: 6}` and field 46 a
+kind-24 entry. Starting the dock-bag drying ended a running mop drying (20:24:10); a wash and dry
+started during a dock-bag drying, and both went on (15:29). For telling the dock's tasks apart on
+this unit, the kind in field 46 was enough, the two drying tasks included.
 
 ### `status/working_status` — metrics, not state
 
