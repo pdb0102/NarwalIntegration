@@ -220,6 +220,74 @@ app went from (−32.0, −166.2) to (−37.0, −141.6).
 app lets the owner drag each straight wall of a room. Do not read wall positions to the
 centimetre.
 
+### Rendering a map yourself
+
+`tools/map_render.py` draws one `map/get_map` answer as a PNG with the reading above and
+nothing else (standard library only). Two real answers from this unit are in `tools/samples/`,
+envelope removed: `cx7-get-map.hex` (2026-11-17 16:11:44, 16,084 bytes) and
+`cx7-get-map-with-path.hex` (2026-11-17 15:14:22, 17,597 bytes, read at the end of a job in
+the Hallway and the Toilet).
+
+```
+python3 tools/map_render.py tools/samples/cx7-get-map-with-path.hex out.png
+python3 tools/map_render.py tools/samples/cx7-get-map-with-path.hex --info
+```
+
+The picture has x to the right and y up, 4 pixels per cell (`--scale N`): rooms coloured by
+room id with the id as a small number, walls dark, carpet cells (flag 4) dotted, cells with
+flag 16 shaded, no-go zones as red outlines, the dock as a green square. The track of the
+current or last job (field 2.13) is a thin blue line; `--no-path` leaves it out. `--info`
+prints the size, the cell size, the edit version, the rooms with their types, the zones and
+the number of track points; for the second sample: 155 × 344 cells of 60 mm, edit version
+2841, seven rooms, two zones, 152 track points.
+
+**The track, checked.** Field 2.13 is `{1: packed float32 x, 2: packed float32 y}`, one
+point per corner of the route, in cells. In the second sample all 152 points lie on room
+cells: 92 in room 4 (Hallway) and 60 in room 5 (Toilet), the two rooms of that job. In the
+answer of 16:11:39, the end of a job on a drawn rectangle (7, 3) to (19, −13), 43 of 54 points
+lie in the rectangle and the other 11 on the way from the dock. The field holds most right
+after a job: 1 point at 16:11:44, five seconds later.
+
+**Asking your own robot.** The tool can make the request itself:
+
+```
+python3 tools/map_render.py --fetch <robot address> --device-id <your device id> \
+    --product-key <your product key> out.png --save my-map.hex
+```
+
+- It opens the local WebSocket (port 9002), sends ONE read-only `map/get_map` request with an
+  empty body to `/<product key>/<device id>/map/get_map`, reads the answer and closes. It
+  sends nothing else and no keep-alive. `--timeout` is 10 s by default.
+- Use **your own** device id and your model's product key ([PROTOCOL.md](PROTOCOL.md) §1 and
+  §3; `KNOWN_PRODUCT_KEYS` in `narwal_client/const.py`). The names are those of the
+  project's client (`device_id`, and the product key that forms its `topic_prefix`).
+- The robot accepts one connection per IP address ([PROTOCOL.md](PROTOCOL.md) §1): disable
+  the Home Assistant config entry first if you run this on the same host.
+- `--save` keeps the answer as hex, to draw again or to share. On this unit the map answer
+  held no id; the request does, so do not post a capture that still contains it.
+- Errors are plain: connection refused, no answer in time (wrong device id or product key, or
+  a sleeping robot, [PROTOCOL.md](PROTOCOL.md) §4), or
+  `not a map/get_map answer (no grid, size or extent found)`.
+- The request frame and the answer parsing were tested offline against recorded answers and
+  a stand-in on the loopback address, and the fetch was run once against the CX7
+  (2026-11-17): the empty request body, which is what the project's client sends, was
+  answered with the full map. The app sends `08001000`.
+
+**Drawing a saved answer instead.** Give the tool a file with the answer to one `map/get_map`
+request, whole, as it came off the wire, as hex text or as raw bytes. It removes a leading
+envelope by itself (byte `0x01`, a length byte, that many bytes, then the body): that covers
+the local answer frame, `01 02 2a 00` followed by the body ([PROTOCOL.md](PROTOCOL.md) §2),
+and the cloud form. It does not remove WebSocket framing from a file. On this unit the answer
+is about 16 KB when idle and up to 64 KB during a long job (section 1). Two other ways to
+come by such a file, neither run by us for this purpose:
+
+1. *The project's client.* `NarwalClient.send_command("map/get_map", timeout=15.0)`
+   (`narwal_client/client.py`) returns a `CommandResponse` whose `raw_payload` is the
+   answer's body; write those bytes to a file.
+2. *A capture.* `tools/CAPTURE_GUIDE.md` describes recording the plaintext WebSocket on port
+   9002 with Wireshark while the app is open. Save the one binary message that follows the
+   `map/get_map` request: it begins `01 02 2a 00`.
+
 ---
 
 ## 3. Units: positions are in cells of 60 mm

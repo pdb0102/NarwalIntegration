@@ -47,6 +47,9 @@ tools/*
 !tools/CAPTURE_GUIDE.md
 # ...and the dashboard generator, which users run against their own registry.
 !tools/gen_dashboard.py
+# ...and the map renderer with its sample answers (docs/MAP-FORMAT.md).
+!tools/map_render.py
+!tools/samples/
 captures/
 proto/
 apk/
